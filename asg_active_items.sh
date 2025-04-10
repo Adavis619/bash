@@ -5,14 +5,14 @@
 : '
 1. Purpose: Identify config filenames in an active environments list.fs and list.defaut file. Option to run asg_breakdown_fs if desired on the output files. Specify single host if desired.
 2. Description: run "./asg_active_items.sh [host] [-b] <environment> <file keyword>".
-3. Author: Anthony Davis
+3. Author: 
 4. Date: 03/17/2025
 '
 
 # RUN_BRKDWN flag gives the option to run asg_breakdown_fs if desired
 
 RUN_BRKDWN=false
-VA_LIST="/$CCSYSDIR/EHR/serverlist/serverlist_va1"
+VA_LIST="server_list_file"
 SINGLE_SITE=""
 
 
