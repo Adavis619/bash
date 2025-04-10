@@ -5,7 +5,7 @@
 : '
 1. Purpose: Process and renumber list files
 2. Description: run ".dosu ./asg_sortlist inputfile"
-3. Author: Anthony Davis
+3. Author: 
 4. Date: 04/09/2025
 5. Usage: ./asg_sortlist inputfile
 '
