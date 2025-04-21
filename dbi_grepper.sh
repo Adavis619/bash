@@ -30,7 +30,7 @@ fi
 # echo the filename to user
 output=$(for file in "$@"; do
              echo -e "${YELLOW}$file${NC}"
-             echo -e -n "${GREEN}grep -E '(${NC}"
+             echo -n "${GREEN}grep -E '(${NC}"
              # then confirm items path
              path="$items_dir/$file"
 
@@ -39,11 +39,12 @@ output=$(for file in "$@"; do
                  continue
              fi
 
-# get non-commented lines, isolate dbis, replace leading/trailing whitespace with quotes and pipes, then output to one line. Final sed to add new line for loops.
-grep '^[^#]' "$path" | awk -F'[' '{print $1}' | sed 's/^[[:space:]]*/"/;s/[[:space:]]*$/"\|/' | tr -d '\n' | sed $'$s/$/\\\n/' | sed -r 's/(.*)\|/\1/'; done)
-if [ -n "$output" ]; then echo -e -n "\n$output${GREEN})' site_dbshm.cf${NC}"; fi
+            # get non-commented lines, isolate dbis, replace leading/trailing whitespace with quotes and pipes, then output to one line. Final sed to remove last pipe.
+            grep '^[^#]' "$path" | awk -F'[' '{print $1}' | sed 's/^[[:space:]]*/"/;s/[[:space:]]*$/"\|/' | tr -d '\n' | sed -r 's/(.*)\|/\1/'
+             echo -e "${GREEN})' site_dbshm.cf${NC}"
+         done
+      )
 
-echo
+echo -e "$output"
 
 exit 0
-
