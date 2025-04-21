@@ -45,7 +45,6 @@ if (( ${#string_args[@]} > 0 )); then
         done
     fi
 
-
  quoted=()
   for s in "${string_args[@]}"; do
     esc=${s//\"/\\\"}
@@ -55,19 +54,22 @@ if (( ${#string_args[@]} > 0 )); then
   dbis=$( IFS="|"; echo "${quoted[*]}" )
 
   if (( ${#file_args[@]} > 0 )); then
+      if (( ${#file_args[@]} > 3 )); then
+          display=( "${file_args[@]:0:3}" )
+          more_count=$(( ${#file_args[@]} -3 ))
+          echo -e "${YELLOW}${display[*]} ... and ${more_count} more files.${NC}"
+      else
           echo -e "${YELLOW}${file_args[@]}${NC}"
-          echo -e "${GREEN}grep -E '(${NC}${dbis}${GREEN})' site_dbshm.cf${NC}"
-  else
+      fi
+
       echo -e "${GREEN}grep -E '(${NC}${dbis}${GREEN})' site_dbshm.cf${NC}"
-  fi
 
   exit 0
 fi
 
-  # single combined grep
-#  echo -e "${GREEN}grep -E '(${NC}${dbis}${GREEN})' site_dbshm.cf${NC}"
-#  exit 0
-#fi
+  echo -e "${GREEN}grep -E '(${NC}${dbis}${GREEN})' site_dbshm.cf${NC}"
+  exit 0
+fi
 
 for file in "${file_args[@]}"; do
   echo -e "${YELLOW}$file${NC}"
