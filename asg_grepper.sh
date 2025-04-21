@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/bin/bash
+. /etc/.profile
+#set -xv
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
 items_dir="$CCRUN/conf/webess/flowsheets/items"
 
 YELLOW='\e[33m'
@@ -8,24 +9,32 @@ GREEN='\e[32m'
 RED='\e[31m'
 NC='\e[0m'
 
-# ── USAGE CHECK ───────────────────────────────────────────────────────────────
 if [ $# -eq 0 ]; then
-  echo "Usage: $0 [\"pattern1\" …] [file1.conf …]" >&2
+  echo "Usage: $0 [\"pattern1\" ] [file1.conf ]" >&2
   exit 1
 fi
 
-# ── STEP 1: partition args ────────────────────────────────────────────────────
+shopt -s nullglob
+
 string_args=()
 file_args=()
 for arg in "$@"; do
-  if [[ -r "$items_dir/$arg" ]]; then
-    file_args+=( "$arg" )
-  else
-    string_args+=( "$arg" )
+    if [[ "$arg" == *[\*\?\[]* ]]; then
+        matches=( "$items_dir"/$arg )
+        if (( ${#matches[@]} )); then
+            for full in "${matches[@]}"; do
+                file_args+=( "$(basename "$full")" )
+            done
+        else
+            echo -e "${RED}Warning:${NC} no files match pattern '$arg'" >&2
+        fi
+    elif [[ -r "$items_dir/$arg" ]]; then
+        file_args+=( "$arg" )
+    else
+        string_args+=( "$arg" )
   fi
 done
 
-# ── STEP 1b: if any literal strings, do only that and exit ────────────────────
 if (( ${#string_args[@]} > 0 )); then
   # escape & wrap each in quotes
   quoted=()
@@ -36,25 +45,34 @@ if (( ${#string_args[@]} > 0 )); then
   # join with '|'
   dbis=$( IFS="|"; echo "${quoted[*]}" )
 
-  # single combined grep
-  echo -e "${GREEN}grep -E '(${dbis})' site_dbshm.cf${NC}"
+  if (( ${#file_args[@]} > 0 )); then
+          echo -e "${YELLOW}${file_args[@]}${NC}"
+          echo -e "${GREEN}grep -E '(${NC}${dbis}${GREEN})' site_dbshm.cf${NC}"
+  else
+      echo -e "${GREEN}grep -E '(${NC}${dbis}${GREEN})' site_dbshm.cf${NC}"
+  fi
+
   exit 0
 fi
 
-# ── STEP 2: for each .conf file, extract DBIs and grep ─────────────────────────
+  # single combined grep
+#  echo -e "${GREEN}grep -E '(${NC}${dbis}${GREEN})' site_dbshm.cf${NC}"
+#  exit 0
+#fi
+
 for file in "${file_args[@]}"; do
   echo -e "${YELLOW}$file${NC}"
-  echo -n "${GREEN}grep -E '("
+  echo -e -n "${GREEN}grep -E '(${NC}"
 
   dbis=$(
     grep '^[^#]' "$items_dir/$file" \
       | awk -F'[' '{print $1}' \
-      | sed 's/^[[:space:]]*"/"/;s/[[:space:]]*$/"\|/' \
+      | sed 's/^[[:space:]]*/"/;s/[[:space:]]*$/"\|/' \
       | tr -d '\n' \
       | sed -r 's/(.*)\|/\1/'
   )
 
-  echo -e "${dbis})' site_dbshm.cf${NC}"
+  echo -e "${dbis}${GREEN})' site_dbshm.cf${NC}"
   echo
 done
 
