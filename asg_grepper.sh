@@ -36,8 +36,17 @@ for arg in "$@"; do
 done
 
 if (( ${#string_args[@]} > 0 )); then
-  # escape & wrap each in quotes
-  quoted=()
+    if (( ${#file_args[@]} > 0 )); then
+        full_paths=( "${file_args[@]/#/$items_dir/}" )
+        for s in "${string_args[@]}"; do
+            if ! grep -Fq "$s" "${full_paths[@]}"; then
+                echo -e "${RED}Error:${NC} string '$s' not found in any files." >&2
+            fi
+        done
+    fi
+
+
+ quoted=()
   for s in "${string_args[@]}"; do
     esc=${s//\"/\\\"}
     quoted+=( "\"$esc\"" )
