@@ -45,6 +45,18 @@ else
     done
 fi
 esac
+
+
+# For Rsync Dir, we can use this:
+for rserv in `echo $RSERVER`
+do
+.dosu rsync -azv $dirname/ $rserv:$dirname
+done
+
+# for Rsync file with full path, we'll probably need dirname and basename utils
+e.g.,
+basedir=$(dirname `echo $1`)
+basefile=$(basename `echo $1`)
 exit
 
 done
