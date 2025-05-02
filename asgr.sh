@@ -76,3 +76,12 @@ else
 fi
 
 exit
+
+asgr was written based on assumption that the file will be remotely sync'd from pwd, as "R" script does.
+
+I would like to retain what asgr is doing now but add a flag "-f" so that it takes full path dir/file names
+
+e.g.,
+
+.dosu asgr -f $CCRUN/conf/webess/cpoe2/categories
+.dosu asgr -f $CCRUN/conf/webess/screens
