@@ -1,71 +1,92 @@
-# A script is required to complete the steps below.
-# Usage should be something like: asg_deIdent.sh <SourceServer> <IntermediateServer> <DestinationServer> <PatientRecord>
+#!/bin/bash
 
-# Required argument variables using the examples from the steps below:
-SourceServer=vfenc1
-IntermediateServer=comsupc
-DestinationServer=asgcore1
-PatientRecord=vol8/p83887228
+# asg_deIdent.sh
+# Automates patient record de-identification from Source to Destination via Intermediate server
 
-# Note: The intermediate server is typically where the user would be running the script from. The user should know which record they want to use already.
+# Usage: ./asg_deIdent.sh <SourceServer> <IntermediateServer> <DestinationServer> <PatientRecord>
+# Example: ./asg_deIdent.sh vfenc1 comsupc asgcore1 vol8/p83887228
 
-# 1. Source Server: Identify record from a Source Server and tar it up. In this example, vfenc1 is the Source Server.
-# Note: The "D" command below is used to locate and identify a patient record.
-# Note: The example Patient Record below is contained in vol8/p83887228.
-# Note: The name for T83887228.z was derived from vol8/p83887228
-[anthonyd@comsupc]:/homes/support/anthonyd> ssh vfenc1
-[anthonyd@vfenc1]:/home/anthonyd> D real 
-vol8/p83887228     83887228 TEST-H   Real, Patient              000-00-9570 
-# 1.1 tar up the desired record
-[anthonyd@vfenc1]:/home/anthonyd> sd 
-[anthonyd@vfenc1]:/vfenc/vfenc/run> .dosu tar -czvf /usr/tmp/T83887228.z vol8/p83887228
-[anthonyd@vfenc1]:/vfenc/vfenc/run> exit
+set -euo pipefail
 
-# 2. Transfer the tar ball to the Intermediate Server. In this example, the intermediate server is comsupc.
-[anthonyd@comsupc]:/homes/support/anthonyd> scp vfenc1:/usr/tmp/T83887228.z . 
-[anthonyd@comsupc]:/homes/support/anthonyd> scp T83887228.z asgcore1:/usr/tmp 
+# ANSI color codes
+RED='\e[31m'
+GREEN='\e[32m'
+YELLOW='\e[33m'
+NC='\e[0m'
 
-# 3. Destination Server: Untar and de-identify. In this example, the Destination Server is asgcore1. The remaining steps are all performed on the Destination Server.
-# 3.1. First check if the record already exists on the destination server. 
-[anthonyd@comsupc]:/homes/support/anthonyd> ssh asgcore1
-[anthonyd@asgcore1]:/san/san/run> sd
-[anthonyd@asgcore1]:/san/san/run> D | grep 167772263 
-[anthonyd@asgcore1]:/san/san/run> .dosu ccarchlist | grep 167772263 
+# Input validation
+if [ "$#" -ne 4 ]; then
+    echo -e "${RED}Usage: $0 <SourceServer> <IntermediateServer> <DestinationServer> <PatientRecord>${NC}"
+    exit 1
+fi
 
-# 3.2. Change the permission and clear out previously processed records.
-[anthonyd@asgcore1]:/home/anthonyd> cd /usr/tmp 
-[anthonyd@asgcore1]:/usr/tmp> chmod 777 T83887228.z 
+# Arguments
+SRC="$1"
+INT="$2"
+DST="$3"
+RECORD="$4"
+PATID=$(basename "$RECORD" | cut -c2-)   # Extract numeric part from p83887228 => 83887228
+TFILE="T${PATID}.z"
+LOG="asg_deIdent_$(date +%Y%m%d_%H%M%S).log"
 
-# 3.3. With the following commands, user might get “mkdir: cannot create directory '/usr/tmp/xidpat': File exists” error, which is OK and can be ignored. 
-.dosu mkdir /usr/tmp/xidpat 
-.dosu chmod 777 /usr/tmp/xidpat 
-chmod 777 /usr/tmp/T*.z 
+# Start logging
+exec > >(tee "$LOG") 2>&1
 
-# 3.4. Set up the variables(TFILE and TVOL) and perform untar and de-identification. Make sure you update the variables to match the current patient record.
+echo -e "${YELLOW}=== Starting de-identification process ===${NC}"
+echo -e "${GREEN}Source: $SRC | Intermediate: $INT (this host) | Destination: $DST${NC}"
+echo -e "${GREEN}Patient Record: $RECORD | Tarball: $TFILE${NC}"
+echo "Log: $LOG"
+echo "Timestamp: $(date)"
+echo
+
+# Step 1: Tar up the patient record on the Source Server
+echo -e "${YELLOW}==> Tarring $RECORD on $SRC...${NC}"
+ssh "$SRC" "cd /vfenc/vfenc/run && .dosu tar -czvf /usr/tmp/$TFILE $RECORD"
+
+# Step 2: Transfer tarball to Intermediate Server, then to Destination
+echo -e "${YELLOW}==> Copying tarball from $SRC to $INT...${NC}"
+scp "$SRC:/usr/tmp/$TFILE" .
+
+echo -e "${YELLOW}==> Forwarding tarball from $INT to $DST...${NC}"
+scp "$TFILE" "$DST:/usr/tmp"
+
+# Step 3: Run de-identification on Destination Server
+echo -e "${YELLOW}==> Performing de-identification on $DST...${NC}"
+ssh "$DST" bash -c "'
+set -e
+echo -e \"\n=== [ $DST ] De-identification session started ===\"
+
 cd /usr/tmp
-TFILE=T83887228.z 
-TVOL=vol8/p83887228      
-chmod 777 $TFILE 
-ls -l $TFILE 
-.dosu tar xvfz $TFILE 
-.dosu deIdent -p  /usr/tmp/$TVOL -c $CCSYSDIR/deIdent.rcf -s $CCSYSDIR/deIdent.staff  -l xidlog -d debug 
-cd /usr/tmp/xidpat 
-.dosu tar cvfz /usr/tmp/$TFILE $TVOL 
-ls -l /usr/tmp/$TFILE 
-.dosu rm -r /usr/tmp/xidpat/vol* 
-.dosu rm -r /usr/tmp/$TVOL 
-.dosu rm /usr/tmp/xidpat/vol* 
+.dosu mkdir -p /usr/tmp/xidpat || true
+.dosu chmod 777 /usr/tmp/xidpat
+chmod 777 $TFILE
 
-# 3.5. Add de-identified record. Set up the variable (PATID) and run. PATID is the number after vol?/p. In this example PATID is 83887228 from vol8/p83887228 
-sd 
-.dosu tar xvfz /usr/tmp/$TFILE 
-.dosu addpat $TVOL 
-PATID=83887228 CAMPUS=$SITE .dosu cql -S -iwritecampus.scm 
-D $TVOL 
+TFILE=$TFILE
+TVOL=$RECORD
 
-# 3.6 Update the name of the de-identified record.
-# 3.6.1. Ensure the variable is correctly set with the patient record we want.
-[anthonyd@asgcore1]:/san/san/run> D $TVOL
-vol8/p83887228     83887228 NOBED    XidPat 001                 03967283161      000000 
-# 3.6.2. Then run command to update the name in the record.The user will continue on their own from here. 
-[anthonyd@asgcore1]:/san/san/run> .dosu changeAdmitDbitem -n 
+# Extract and de-identify
+.dosu tar xvfz \$TFILE
+.dosu deIdent -p /usr/tmp/\$TVOL -c \$CCSYSDIR/deIdent.rcf -s \$CCSYSDIR/deIdent.staff -l xidlog -d debug
+
+# Repack and cleanup
+cd /usr/tmp/xidpat
+.dosu tar cvfz /usr/tmp/\$TFILE \$TVOL
+.dosu rm -r /usr/tmp/xidpat/vol*
+.dosu rm -r /usr/tmp/\$TVOL
+.dosu rm /usr/tmp/xidpat/vol*
+
+# Add de-identified patient
+cd /san/san/run
+.dosu tar xvfz /usr/tmp/\$TFILE
+.dosu addpat \$TVOL
+PATID=$PATID
+CAMPUS=\$SITE
+.dosu cql -S -iwritecampus.scm
+
+# Confirm record
+D \$TVOL
+echo -e \"=== [ $DST ] De-identification complete ===\"
+'"
+
+echo -e "${GREEN}==> All done! De-identified patient record added.${NC}"
+echo -e "${GREEN}Check the full log at: $LOG${NC}"
