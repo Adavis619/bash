@@ -78,15 +78,6 @@ for term in "${search_terms[@]}"; do
     wait "$spin_pid" 2>/dev/null
     # Return and clear line
     printf "\r\033[K"
-
-    # Remove the spinner then show results
-    if [[ $found -eq 1 ]]; then
-        printf "In use: \"$term\"\n"
-
-    else
-        printf "NOT in use: \"$term\""
-        not_in_use+=( "\"$term\"" )
-    fi
 done
 
 # Final report
