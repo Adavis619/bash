@@ -209,9 +209,10 @@ for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
             modified_line=$(echo "$new_line" | awk -F'"' -v disp="$unique_display" -v full="$unique_fullname" \
                 '{OFS="\""; $4=disp; $6=full; print}')
             
-            grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 > /usr/tmp/site_dbshm.cf.$HOST.tmp
-            echo "$modified_line" >> /usr/tmp/site_dbshm.cf.$HOST.tmp
-            mv /usr/tmp/site_dbshm.cf.$HOST.tmp /usr/tmp/site_dbshm.cf.$HOST.2
+            .dosu grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 > /usr/tmp/site_dbshm.cf.$HOST.tmp
+            .dosu chmod 777 /usr/tmp/site_dbshm.cf.$HOST.tmp
+            .dosu bash -c "echo '$modified_line' >> /usr/tmp/site_dbshm.cf.$HOST.tmp"
+            .dosu mv /usr/tmp/site_dbshm.cf.$HOST.tmp /usr/tmp/site_dbshm.cf.$HOST.2
             
             echo "Updated: $internal_name" | tee -a "$logname"
             
