@@ -1,0 +1,83 @@
+New script to create, asg_dbiNameChange, info:
+
+File to update at each host: site_dbshm.cf:
+[anthonyd@asgcon1|vad]:/vad/vad/run > ls -l site_dbshm.cf
+-rw-r----- 1 cis cis 3056949 Sep 29 14:33 site_dbshm.cf
+
+Contents of site_dbshm.cf: rows of database items, or "DBIs".
+Each DBI has three names; Internal Name, Display Name, Full Name.
+We will refer to these names as fields 1,2, and 3, respectively. 
+
+The following shows how the DBI rows typically appear in the file:
+[anthonyd@asgcon1|vad]:/vad/vad/run > grep -E "Oral Care|OBS.PainPain1AcceptGoal|OBS.PulmETTubePlaceDate" site_dbshm.cf
+"OBS.PainPain1AcceptGoal"    "Pain1 Accept "    "Pain 1 Acceptable Goal"    -    off    off    "N/A"    "N/A"    %32.0
+"OBS.PulmETTubePlaceDate"    "ET Place Dte"    "ET Placement Date"    -    off    off    "N/A"    "N/A"    %32.0
+"Oral Care"  "OralCareNonVen"  "Oral Care Non-Vented"   -    off    off    "N/A"    "N/A"    %6.0
+
+So, above you can see that:
+"Oral Care" is the Internal Name.
+"OralCareNonVen" is the Display Name.
+"Oral Care Non-Vented" is the Full Name. 
+
+We need to be able to update the Display Name and the Full Name.
+I will supply a file called "dbiNameChanges" that contains rows of the DBIs with their new names.
+Using the dbiNameChanges file, the script will use the Internal Name (field 1) to look for an EXACT match in site_dbshm.cf.
+When a match is found, the row in site_dbshm.cf will be deleted and replaced with the corresponding row from dbiNameChanges.
+
+For example, dbiNameChanges might contain a line that looks like this:
+"Oral Care"  "OralCareNonVen"  "Oral Care"   -    off    off    "N/A"    "N/A"    %6.0
+So that line would replace this one in site_dbshm.cf:
+"Oral Care"  "OralCareNonVen"  "Oral Care Non-Vented"   -    off    off    "N/A"    "N/A"    %6.0
+
+Now, if there is a duplicate match for either the Display Name (field 2) or Full Name (field 3) in the site_dbshm.cf file already, then the script must add a space at the beginning or end of the replacement string.
+So, if either "OralCareNonVen" or "Oral Care" exist in site_dbshm.cf already, change the new strings to "OralCareNonVen " or " Oral Care ". Add a space until the strings are unique.
+
+# Sites being updated
+SITE=/ccrun/cci/run/EHR/serverlist/serverlist_masterdbpush
+
+# Push file to /usr/tmp and change permission
+for i in `cat $SITE|grep -v ^#|grep -v ehr2|grep -v qcci01`
+do scp /ccrun/cci/run/dbiNameChanges $i:/usr/tmp/ >/dev/null 2>&1
+ssh $i 'chmod 770 /usr/tmp/dbiNameChanges'
+done
+
+# Now that the dbiNameChanges file has been pushed, ssh to the sites again and proceed with the steps below
+
+# for naming backup file
+buExt=$(date +%Y%m%d)
+
+# make the logfile used to document the following steps
+logname="usr/tmp/"$USER".dbichanges.txt"
+.dosu touch $logname
+.dosu chmod 777 $logname
+
+# Gather temp files. We will be using these files to do the processing first.
+# then we will use the file with the updates to copy over the original $CCSYSDIR/site_dbshm.cf file.
+.dosu cp $CCSYSDIR/site_dbshm.cf /usr/tmp/site_dbshm.cf.$HOST
+.dosu cp $CCSYSDIR/site_dbshm.cf /usr/tmp/site_dbshm.cf.$HOST.2
+.dosu chmod 777 /usr/tmp/site_dbshm.cf.$HOST*
+
+# Now compare /usr/tmp/site_dbshm.cf.$HOST against our dbiNameChanges file.
+# Then make the changes in the /usr/tmp/site_dbshm.cf.$HOST.2 file.
+
+# Activate the previously updated temporary site_dbshm.cf
+echo "Activating modified site_dbshm.cf"
+
+# Check for the staged file
+cd $CCSYSDIR/
+if [ ! -f /usr/tmp/site_dbshm.cf.$HOST.2 ]; then
+echo -e "Staged file not found. Review issues with script."
+exit 1
+fi
+
+# If the staged file is there, proceed with changes.
+# the site_dbshm.cf must retain its original permissions/ownership
+.dosu cp site_dbshm.cf site_dbshm.cf.dbiMod.$buExt
+.dosu asgr site_dbshm.cf.dbiMod.$buExt
+echo -e "Backup created: "$(ls -ltr $PWD/site_dbshm.cf.dbiMod.$buExt)
+.dosu cp /usr/tmp/site_dbshm.cf.$HOST.2 site_dbshm.cf
+sleep 1
+.dosu Rloaddbshm
+.dosu asgr site_dbshm.cf
+.dosu CTImport -f site_dbshm.cf
+adiff site_dbshm.cf site_dbshm.cf.dbiMod.$buExt
