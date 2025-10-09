@@ -95,9 +95,11 @@ process_site_changes() {
         modified_line=$(echo "$new_line" | awk -F'"' -v disp="$unique_display" -v full="$unique_fullname" \
             '{OFS="\""; $4=disp; $6=full; print}')
         
-        # Delete the old line and add the new one to the .2 file
-        grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 | .dosu tee /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
-        echo "$modified_line" | .dosu tee -a /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
+        # Delete the old line and replace it with the new one in the same position
+        awk -v internal="$internal_name" -v newline="$modified_line" '
+            $0 ~ "\"" internal "\"" {print newline; next}
+            {print}
+        ' /usr/tmp/site_dbshm.cf.$HOST.2 | .dosu tee /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
         .dosu mv /usr/tmp/site_dbshm.cf.$HOST.tmp /usr/tmp/site_dbshm.cf.$HOST.2
         
         echo "Updated: $internal_name" | tee -a "$logname"
@@ -208,8 +210,11 @@ for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
             modified_line=$(echo "$new_line" | awk -F'"' -v disp="$unique_display" -v full="$unique_fullname" \
                 '{OFS="\""; $4=disp; $6=full; print}')
             
-            grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 | .dosu tee /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
-            echo "$modified_line" | .dosu tee -a /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
+            # Delete the old line and replace it with the new one in the same position
+            awk -v internal="$internal_name" -v newline="$modified_line" '
+                $0 ~ "\"" internal "\"" {print newline; next}
+                {print}
+            ' /usr/tmp/site_dbshm.cf.$HOST.2 | .dosu tee /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
             .dosu mv /usr/tmp/site_dbshm.cf.$HOST.tmp /usr/tmp/site_dbshm.cf.$HOST.2
             
             echo "Updated: $internal_name" | tee -a "$logname"
