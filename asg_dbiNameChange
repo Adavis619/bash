@@ -96,9 +96,8 @@ process_site_changes() {
             '{OFS="\""; $4=disp; $6=full; print}')
         
         # Delete the old line and add the new one to the .2 file
-        .dosu grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 > /usr/tmp/site_dbshm.cf.$HOST.tmp
-        .dosu chmod 777 /usr/tmp/site_dbshm.cf.$HOST.tmp
-        .dosu bash -c "echo '$modified_line' >> /usr/tmp/site_dbshm.cf.$HOST.tmp"
+        grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 | .dosu tee /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
+        echo "$modified_line" | .dosu tee -a /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
         .dosu mv /usr/tmp/site_dbshm.cf.$HOST.tmp /usr/tmp/site_dbshm.cf.$HOST.2
         
         echo "Updated: $internal_name" | tee -a "$logname"
@@ -209,9 +208,8 @@ for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
             modified_line=$(echo "$new_line" | awk -F'"' -v disp="$unique_display" -v full="$unique_fullname" \
                 '{OFS="\""; $4=disp; $6=full; print}')
             
-            .dosu grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 > /usr/tmp/site_dbshm.cf.$HOST.tmp
-            .dosu chmod 777 /usr/tmp/site_dbshm.cf.$HOST.tmp
-            .dosu bash -c "echo '$modified_line' >> /usr/tmp/site_dbshm.cf.$HOST.tmp"
+            grep -v "^\"$internal_name\"" /usr/tmp/site_dbshm.cf.$HOST.2 | .dosu tee /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
+            echo "$modified_line" | .dosu tee -a /usr/tmp/site_dbshm.cf.$HOST.tmp > /dev/null
             .dosu mv /usr/tmp/site_dbshm.cf.$HOST.tmp /usr/tmp/site_dbshm.cf.$HOST.2
             
             echo "Updated: $internal_name" | tee -a "$logname"
