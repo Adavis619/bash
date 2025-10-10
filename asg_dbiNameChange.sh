@@ -42,7 +42,6 @@ for i in asgcon1; do
         buExt=$(date +%Y%m%d)
 
         # Make the logfile
-        echo "Log file: /usr/tmp/$HOST.dbichanges.txt" | tee -a "$logname"
         logname="/usr/tmp/$HOST.dbichanges.txt"
         .dosu touch $logname
         .dosu chmod 777 $logname
@@ -155,5 +154,5 @@ ENDSSH
     echo "Completed site: $i"
     echo "---"
 done
-
+echo "Log file: /usr/tmp/$HOST.dbichanges.txt"
 echo "All hosts updated successfully"
