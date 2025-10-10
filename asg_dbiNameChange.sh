@@ -43,7 +43,7 @@ for i in asgcon1; do
 
         # Make the logfile
         echo "Log file: /usr/tmp/$HOST.dbichanges.txt" | tee -a "$logname"
-        logname="/usr/tmp/$USER.dbichanges.txt"
+        logname="/usr/tmp/$HOST.dbichanges.txt"
         .dosu touch $logname
         .dosu chmod 777 $logname
 
