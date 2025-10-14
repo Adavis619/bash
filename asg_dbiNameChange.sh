@@ -14,8 +14,8 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
-# Validate file exists
-DBI_FILE="$1"
+# Get the full path to the file (handles both relative and absolute paths)
+DBI_FILE=$(realpath "$1")
 if [ ! -f "$DBI_FILE" ]; then
     echo "Error: File not found: $DBI_FILE"
     exit 1
