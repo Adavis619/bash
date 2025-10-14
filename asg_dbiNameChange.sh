@@ -15,27 +15,30 @@ if [ $# -ne 1 ]; then
 fi
 
 # Validate file exists
-DBI_CHANGES_FILE="$1"
-if [ ! -f "$DBI_CHANGES_FILE" ]; then
-    echo "Error: File not found: $DBI_CHANGES_FILE"
+DBI_FILE="$1"
+if [ ! -f "$DBI_FILE" ]; then
+    echo "Error: File not found: $DBI_FILE"
     exit 1
 fi
+
+# Extract just the filename for remote operations
+DBI_FILENAME=$(basename "$DBI_FILE")
 
 # Sites being updated
 SITE=/ccrun/cci/run/EHR/serverlist/serverlist_masterdbpush
 
 # Main script execution
 echo "Starting DBI Name Change Process"
-echo "Using dbiNameChanges file: $DBI_CHANGES_FILE"
+echo "Using dbiNameChanges file: $DBI_FILE"
 
 # Push dbiNameChanges file to sites
-echo "Pushing dbiNameChanges file to sites..."
+echo "Pushing $DBI_FILENAME to sites..."
 for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
-    scp "$DBI_CHANGES_FILE" $i:/usr/tmp/dbiNameChanges >/dev/null 2>&1
-    ssh $i 'chmod 770 /usr/tmp/dbiNameChanges'
+    scp "$DBI_FILE" $i:/usr/tmp/$DBI_FILENAME >/dev/null 2>&1
+    ssh $i "chmod 770 /usr/tmp/$DBI_FILENAME"
 done
 
-echo "Files pushed successfully"
+echo "$DBI_FILENAME file pushed successfully"
 
 # Process changes at each site
 for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
@@ -135,7 +138,7 @@ for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
             
             echo "Updated: $internal_name" | tee -a "$logname"
             
-        done < /usr/tmp/dbiNameChanges
+        done < /usr/tmp/$DBI_FILENAME
         
         echo "Completed processing at $(date)" | tee -a "$logname"
         
