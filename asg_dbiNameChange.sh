@@ -146,9 +146,9 @@ for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
             
             echo "Updated: $internal_name" | tee -a "$logname"
             
-        done < /usr/tmp/$DBI_FILENAME
+        done < /usr/tmp/\$DBI_FILE
         
-        echo "Completed processing at $(date)" | tee -a "$logname"
+        echo "Completed processing at \$(date)" | tee -a "\$logname"
         
         # Activate the changes
         echo "Activating modified site_dbshm.cf"
