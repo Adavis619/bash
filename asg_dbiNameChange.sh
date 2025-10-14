@@ -44,22 +44,30 @@ echo "$DBI_FILENAME file pushed successfully"
 for i in $(cat $SITE | grep -v ^# | grep -v ehr2 | grep -v qcci01); do
     echo "Processing site: $i"
     
-    ssh $i << 'ENDSSH'
+    ssh $i << ENDSSH
         # For naming backup file
-        buExt=$(date +%Y%m%d)
+        buExt=\$(date +%Y%m%d)
         
         # Make the logfile
-        logname="/usr/tmp/$USER.dbichanges.txt"
-        .dosu touch $logname
-        .dosu chmod 777 $logname
+        logname="/usr/tmp/\$USER.dbichanges.txt"
+        .dosu touch \$logname
+        .dosu chmod 777 \$logname
         
         # Gather temp files
-        .dosu cp $CCSYSDIR/site_dbshm.cf /usr/tmp/site_dbshm.cf.$HOST
-        .dosu cp $CCSYSDIR/site_dbshm.cf /usr/tmp/site_dbshm.cf.$HOST.2
-        .dosu chmod 777 /usr/tmp/site_dbshm.cf.$HOST*
+        .dosu cp \$CCSYSDIR/site_dbshm.cf /usr/tmp/site_dbshm.cf.\$HOST
+        .dosu cp \$CCSYSDIR/site_dbshm.cf /usr/tmp/site_dbshm.cf.\$HOST.2
+        .dosu chmod 777 /usr/tmp/site_dbshm.cf.\$HOST*
         
-        # Process changes (call function)
-        extract_field() {
+        echo "=== Updating DBIs at \$HOST ===" | tee -a "\$logname"
+        echo "Start: \$(date)" | tee -a "\$logname"
+        
+        # Set the DBI filename to read from
+        DBI_FILE="$DBI_FILENAME"
+        
+        echo "=== Processing DBI Changes at \$HOST ===" | tee -a "\$logname"
+        echo "Start time: \$(date)" | tee -a "\$logname"
+        
+        while IFS= read -r new_line; do
             local line="$1"
             local field_num="$2"
             echo "$line" | awk -F'"' -v fn=$((field_num * 2)) '{print $fn}'
