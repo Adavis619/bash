@@ -3,17 +3,18 @@
 #set -xv
 
 : '
-1. Purpose: To numerically reorder or renumber files. Intended for list.fs or list.default files.
+1. Purpose: To numerically reorder or renumber lines in files. Handles list.fs, list.default, env.cf and unittype files.
             This script can process a file in two ways:
-            In the default (renumber) mode, non-commented lines are kept in their original order and a lines list number may be modified.
-            In reorder mode (with the "-r" flag), numeric lines are re-ordered based on their original numeric assignment. The list number of the line is not changed, the line may just be moved.
+            In the default reorder mode, numeric lines are re-ordered based on their original numeric assignment. The list number of the line is not changed, the line may just be moved.
+            In the renumber mode (using -n flag), non-commented lines are kept in their original order and a lines list number may be modified.
             In both modes, commented out lines are moved to the bottom of the file.
             By default, the file name must start with "list.".
-            The "-a" flag allows any file name.
-2. Description: run "./asg_listorder.sh [-a] [-r] inputfile"
+            The "-a" flag allows any file type.
+            unittype and env.cf files may only be renumbered.
+2. Description: run "./asg_listorder.sh [-a] [-n] inputfile"
 3. Author: Anthony Davis
 4. Date: 04/02/2025
-5. Usage: ./asg_listorder.sh [-a] [-r] inputfile
+5. Usage: ./asg_listorder.sh [-a] [-n] inputfile
 '
 
 # Define color codes
@@ -24,37 +25,38 @@ NC='\e[0m'
 
 # Setup the optional flags to enable modes:
 # -a (allow any file)
-# -r (reorder mode)
+# -n (renumber mode)
 allowAny=0
-mode="renumber"
+mode="reorder"
 while [[ "$1" == -* ]]; do
     case "$1" in
         -a)
             allowAny=1
             shift
             ;;
-        -r)
-            mode="reorder"
+        -n)
+            mode="renumber"
             shift
             ;;
         *)
             echo -e "${RED}Unknown flag:${RED} $1"
-            echo -e "${YELLOW}Usage: $0 [-a] [-r] inputfile${NC}
-By default, this script ${YELLOW}RENUMBERS${NC} and processes list files. For any other file, use the [-a] flag.
-To ${YELLOW}REORDER${NC} and retain each lines list number, use the [-r] flag."
+            echo -e "${YELLOW}Usage: $0 [-a] [-n] inputfile${NC}
+By default, this script ${YELLOW}REORDERS${NC} and processes list files. For any other file, use the [-a] flag.
+To ${YELLOW}RENUMBER${NC} and modify each line's list number in place, use the [-n] flag."
             exit 1
             ;;
     esac
 done
 
 if [ "$#" -lt 1 ]; then
-    echo -e "${YELLOW}Usage: $0 [-a] [-r] inputfile${NC}
-By default, this script ${YELLOW}RENUMBERS${NC} and processes list files. For any other file, use the [-a] flag.
-To ${YELLOW}REORDER${NC} and retain each lines list number, use the [-r] flag."
+    echo -e "${YELLOW}Usage: $0 [-a] [-n] inputfile${NC}
+By default, this script ${YELLOW}REORDERS${NC} and processes list files. For any other file, use the [-a] flag.
+To ${YELLOW}RENUMBER${NC} and modify each line's list number in place, use the [-n] flag."
     exit 1
 fi
 
 # Check for the inputfile
+
 inputfile="$1"
 if [ ! -f "$inputfile" ]; then
     echo -e "${RED}Error:${NC} File '$inputfile' not found."
@@ -112,7 +114,7 @@ if (fileType == "unittype") {
     next
 }
  
-# Original list file processing below
+# list file processing below
 # Check for commented out lines and add to commented array
 # If not commented out then add to the notCommented array
 if ($0 ~ /^[[:space:]]*#/) {
@@ -175,8 +177,7 @@ if (fileType == "unittype") {
     }
     next
 }
- 
-# Original list file processing below
+
 # Proceed with reording if that option is chosen:
 if (mode == "reorder") {
         # Sort the collected numbered lines and add to the sorted array
@@ -227,4 +228,4 @@ if (mode == "reorder") {
 mv "$temp" "$inputfile"
 .dosu chmod 750 "$inputfile"
 .dosu asgr "$inputfile"
-diff "$inputfile" "$backupfile"
+adiff "$inputfile" "$backupfile"
