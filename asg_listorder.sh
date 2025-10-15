@@ -61,10 +61,22 @@ if [ ! -f "$inputfile" ]; then
     exit 1
 fi
 
-# Check to see that list file was provided by default
+# Check to see that list file, env.cf, or unittype was provided by default
 basename=$(basename "$inputfile")
-if [[ $basename != list.* ]] && [ $allowAny -ne 1 ]; then
-    echo -e "${RED}Error:${NC} File name must start with 'list.' or use the -a flag."
+fileType="list"
+if [[ $basename == env.cf ]]; then
+    fileType="env"
+elif [[ $basename == unittype ]]; then
+    fileType="unittype"
+elif [[ $basename != list.* ]] && [ $allowAny -ne 1 ]; then
+    echo -e "${RED}Error:${NC} File name must start with 'list.', be 'env.cf', be 'unittype', or use the -a flag."
+    exit 1
+fi
+
+# Reorder mode only applies to list files
+if [[ "$mode" == "reorder" ]] && [[ "$fileType" == "env" || "$fileType" == "unittype" ]]; then
+    echo -e "${RED}Error:${NC} Reorder mode (-r) only applies to list files."
+    echo -e "${YELLOW}Files 'env.cf' and 'unittype' only support renumbering.${NC}"
     exit 1
 fi
 
@@ -79,8 +91,28 @@ temp=$(mktemp)
 # Proceed with default renumbering:
 
 # Determine which mode to run in. Default or reorder.
-awk -v mode="$mode" '
+awk -v mode="$mode" -v fileType="$fileType" '
 {
+# Skip empty lines (lines with only whitespace or completely empty)
+if ($0 ~ /^[[:space:]]*$/) {
+    next
+}
+ 
+# Handle env.cf files
+if (fileType == "env") {
+    # Just store all lines in order (including comments)
+    allLines[++lineCount] = $0
+    next
+}
+ 
+# Handle unittype files
+if (fileType == "unittype") {
+    # Store all lines in order (including comments)
+    allLines[++lineCount] = $0
+    next
+}
+ 
+# Original list file processing below
 # Check for commented out lines and add to commented array
 # If not commented out then add to the notCommented array
 if ($0 ~ /^[[:space:]]*#/) {
@@ -106,6 +138,45 @@ if ($0 ~ /^[[:space:]]*#/) {
     }
 }
 END {
+# Handle env.cf file renumbering
+if (fileType == "env") {
+    counter = 1
+    for (i = 1; i <= lineCount; i++) {
+        line = allLines[i]
+        # Renumber lines with #N pattern, leave comments as-is
+        if (line ~ /^[^#].*#[0-9]+/) {
+            # Use gensub to replace #N with the sequential counter
+            newLine = gensub(/(.*#)[0-9]+(.*)/, "\\1" counter "\\2", 1, line)
+            print newLine
+            counter++
+        } else {
+            # Print comments and other lines unchanged
+            print line
+        }
+    }
+    next
+}
+ 
+# Handle unittype file renumbering
+if (fileType == "unittype") {
+    counter = 0
+    for (i = 1; i <= lineCount; i++) {
+        line = allLines[i]
+        # Renumber non-comment lines with []\N pattern at the end
+        if (line !~ /^[[:space:]]*#/) {
+            # Use gensub to replace the last []N with the sequential counter
+            newLine = gensub(/(\[\])[0-9]+[[:space:]]*$/, "\\1" counter, 1, line)
+            print newLine
+            counter++
+        } else {
+            # Print comments unchanged
+            print line
+        }
+    }
+    next
+}
+ 
+# Original list file processing below
 # Proceed with reording if that option is chosen:
 if (mode == "reorder") {
         # Sort the collected numbered lines and add to the sorted array
