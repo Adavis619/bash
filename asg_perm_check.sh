@@ -13,10 +13,11 @@
 STAFF_FILE="$CCSYSDIR/staff.m"
 PERM_FILE="$CCSYSDIR/appli_perms.m"
 DEFAULT_FILE="$CCSYSDIR/default_perms.m"
+STAFFP_FILE="$CCSYSDIR/staff.p"
 
-# FIX #7: Define functions at the top before any logic
-
-# FIX #3: Renamed internal variable from MODE to PERM_MODE to avoid collision with script-level MODE
+########################################
+# Format Output
+########################################
 format_output() {
     local NUM="$1"
     local PERM_MODE="$2"
@@ -29,7 +30,9 @@ format_output() {
     printf "%-12s %-30.30s %-10s\n" "$NUM" "$APP_NAME" "$ACCESS"
 }
 
-# --- Argument handling ---
+########################################
+# Argument Handling
+########################################
 if [[ "$1" == "-d" ]]; then
     MODE="DEFAULT"
 elif [[ -n "$1" ]]; then
@@ -42,7 +45,9 @@ else
     exit 1
 fi
 
-# --- Default mode: check default_perms.m file ---
+########################################
+# DEFAULT MODE
+########################################
 if [[ "$MODE" == "DEFAULT" ]]; then
     echo "Checking default permissions file: $DEFAULT_FILE"
     echo
@@ -55,39 +60,45 @@ if [[ "$MODE" == "DEFAULT" ]]; then
 
         for p in $PERMS; do
             CUR="${p%%:*}"
+            CUR="${CUR//$'\r'/}"
+            PREV="${PREV//$'\r'/}"
 
-            # FIX #5: Guard against non-numeric perm entries before integer comparison
-            if [[ ! "$CUR" =~ ^[0-9]+$ || ! "$PREV" =~ ^[0-9]+$ ]]; then
+            if [[ -z "$PREV" ]]; then
                 PREV="$CUR"
                 continue
             fi
 
-            if [[ -n "$PREV" && "$CUR" -lt "$PREV" ]]; then
-                if [[ "$OUT_OF_ORDER" == false ]]; then
-                    echo "Group: $GROUP"
-                    echo "  ERROR - Permissions out of order:"
-                    OUT_OF_ORDER=true
+            if [[ "$CUR" =~ ^[0-9]+$ && "$PREV" =~ ^[0-9]+$ ]]; then
+                if (( CUR < PREV )); then
+                    if [[ "$OUT_OF_ORDER" == false ]]; then
+                        echo "Group: $GROUP"
+                        echo "  ERROR - Permissions out of order:"
+                        OUT_OF_ORDER=true
+                    fi
+                    echo "    $CUR appears after $PREV"
                 fi
-                echo "    $CUR appears after $PREV"
             fi
 
             PREV="$CUR"
         done
 
         [[ "$OUT_OF_ORDER" == true ]] && echo
+
     done < "$DEFAULT_FILE"
 
     exit 0
 fi
 
-# --- User mode: check account perms ---
+########################################
+# USER MODE
+########################################
 
 # Normalize username
 USER_BASE="${USER_IN%@*}"
 USER_UPPER=$(echo "$USER_BASE" | tr '[:lower:]' '[:upper:]')
 
-# Find user in staff.m
-LINE=$(grep -i "^$USER_UPPER;" "$STAFF_FILE")
+# Match USER or USER@EMAIL
+LINE=$(grep -iE "^${USER_UPPER}(@|;)" "$STAFF_FILE" | head -1)
 
 if [[ -z "$LINE" ]]; then
     echo "User not found: $USER_IN"
@@ -96,25 +107,39 @@ fi
 
 IFS=';' read -r USERNAME USERID PERMS FIRST LAST GROUP <<< "$LINE"
 
-STAFFP_FILE="$CCSYSDIR/staff.p"
+########################################
+# Get Staff ID + Roles from staff.p
+########################################
+
 STAFF_ID="UNKNOWN"
 ROLES="UNKNOWN"
 
-# Try to find matching record in staff.p
-MATCH_LINE=$(.dosu grep -i ";$FIRST;$LAST;" "$STAFFP_FILE" | grep -i ";$GROUP;" | head -1)
+FULL_NAME="$FIRST"
+
+LAST_NAME=$(echo "$FULL_NAME" | cut -d',' -f1 | xargs)
+FIRST_NAME=$(echo "$FULL_NAME" | cut -d',' -f2 | xargs)
+
+MATCH_LINE=$(.dosu grep -i ";$FIRST_NAME;$LAST_NAME;" "$STAFFP_FILE" | head -1)
 
 if [[ -n "$MATCH_LINE" ]]; then
     IFS=';' read -r RAW_ID FN LN REST <<< "$MATCH_LINE"
-
     STAFF_ID="staffid.$RAW_ID"
 
-    # FIX #6: Use awk field extraction instead of fragile grep-o regex for roles
-    ROLES=$(echo "$MATCH_LINE" | awk -F';' '{
+    ROLES=$(echo "$MATCH_LINE" | awk -F';' '
+    {
         for (i=1; i<=NF; i++) {
-            if ($i ~ /,/) { print $i; exit }
+            if ($i ~ /,/) {
+                gsub(/^,|,$/, "", $i)
+                print $i
+                exit
+            }
         }
-    }' | tr -d ',')
+    }')
 fi
+
+########################################
+# Header Output
+########################################
 
 echo "Username: $USER_BASE"
 echo "Staff ID: $STAFF_ID"
@@ -122,96 +147,117 @@ echo "Name: $FIRST $LAST"
 echo "Group Permission: $GROUP"
 echo "Role(s): $ROLES"
 
-# --- Check Permission Order ---
+########################################
+# ORDER CHECK
+########################################
+
 PERM_NUMS=()
 for p in $PERMS; do
     PERM_NUMS+=("${p%%:*}")
 done
 
-# FIX #4: Use consistent boolean variable style throughout (true/false strings)
 OUT_OF_ORDER=false
-PREV=""
 ORDER_ERRORS=()
+PREV=""
 
 for CURRENT in "${PERM_NUMS[@]}"; do
-    # FIX #5: Guard against non-numeric perm entries before integer comparison
-    if [[ ! "$CURRENT" =~ ^[0-9]+$ || ! "$PREV" =~ ^[0-9]+$ ]]; then
+    CURRENT="${CURRENT//$'\r'/}"
+    PREV="${PREV//$'\r'/}"
+
+    if [[ -z "$PREV" ]]; then
         PREV="$CURRENT"
         continue
     fi
 
-    if [[ -n "$PREV" && "$CURRENT" -lt "$PREV" ]]; then
-        if [[ "$OUT_OF_ORDER" == false ]]; then
+    if [[ "$CURRENT" =~ ^[0-9]+$ && "$PREV" =~ ^[0-9]+$ ]]; then
+        if (( CURRENT < PREV )); then
             OUT_OF_ORDER=true
+            ORDER_ERRORS+=("$CURRENT appears after $PREV")
         fi
-        ORDER_ERRORS+=("$CURRENT appears after $PREV")
     fi
+
     PREV="$CURRENT"
 done
 
-# --- Compare Against default_perms.m ---
+########################################
+# DEFAULT COMPARISON
+########################################
 
-# FIX #1: Added missing grep command
-DEFAULT_LINE=$(grep "^${GROUP};" "$DEFAULT_FILE")
+DEFAULT_LINE=$(grep -i "^${GROUP};" "$DEFAULT_FILE" | head -1)
 
 if [[ -z "$DEFAULT_LINE" ]]; then
-    echo "Config Status: ERROR - Group not found in default_perms.m"
-    exit 1
-fi
-
-IFS=';' read -r DEF_GROUP DEF_PERMS <<< "$DEFAULT_LINE"
-
-declare -A USER_MAP
-declare -A DEF_MAP
-
-# Load user perms into map
-for p in $PERMS; do
-    NUM="${p%%:*}"
-    PERM_MODE="${p##*:}"
-    USER_MAP["$NUM"]="$PERM_MODE"
-done
-
-# Load default perms into map
-for p in $DEF_PERMS; do
-    NUM="${p%%:*}"
-    PERM_MODE="${p##*:}"
-    DEF_MAP["$NUM"]="$PERM_MODE"
-done
-
-MISSING=false
-EXTRA=false
-MISMATCH=false
-
-MISSING_LIST=()
-EXTRA_LIST=()
-MISMATCH_LIST=()
-
-# Check for missing & mismatched perms
-for NUM in "${!DEF_MAP[@]}"; do
-    if [[ -z "${USER_MAP[$NUM]}" ]]; then
-        MISSING=true
-        MISSING_LIST+=("$NUM:${DEF_MAP[$NUM]}")
-    elif [[ "${USER_MAP[$NUM]}" != "${DEF_MAP[$NUM]}" ]]; then
-        MISMATCH=true
-        MISMATCH_LIST+=("$NUM:${DEF_MAP[$NUM]}")
-    fi
-done
-
-# Check for extra perms
-for NUM in "${!USER_MAP[@]}"; do
-    if [[ -z "${DEF_MAP[$NUM]}" ]]; then
-        EXTRA=true
-        EXTRA_LIST+=("$NUM:${USER_MAP[$NUM]}")
-    fi
-done
-
-# --- Config Status Report ---
-if ! $MISSING && ! $EXTRA && ! $MISMATCH && [[ "$OUT_OF_ORDER" == false ]]; then
-    echo "Config Status: Permissions in order and match default_perms.m file."
+    SKIP_COMPARE=true
 else
-    echo "Config Status: ERROR - Permissions DO NOT match default_perms.m file."
-    echo
+    SKIP_COMPARE=false
 fi
+
+if [[ "$SKIP_COMPARE" == false ]]; then
+
+    IFS=';' read -r DEF_GROUP DEF_PERMS <<< "$DEFAULT_LINE"
+
+    declare -A USER_MAP DEF_MAP
+
+    for p in $PERMS; do
+        USER_MAP["${p%%:*}"]="${p##*:}"
+    done
+
+    for p in $DEF_PERMS; do
+        DEF_MAP["${p%%:*}"]="${p##*:}"
+    done
+
+    MISSING=false
+    EXTRA=false
+    MISMATCH=false
+
+    MISSING_LIST=()
+    EXTRA_LIST=()
+    MISMATCH_LIST=()
+
+    for NUM in "${!DEF_MAP[@]}"; do
+        if [[ -z "${USER_MAP[$NUM]}" ]]; then
+            MISSING=true
+            MISSING_LIST+=("$NUM:${DEF_MAP[$NUM]}")
+        elif [[ "${USER_MAP[$NUM]}" != "${DEF_MAP[$NUM]}" ]]; then
+            MISMATCH=true
+            MISMATCH_LIST+=("$NUM:${DEF_MAP[$NUM]}")
+        fi
+    done
+
+    for NUM in "${!USER_MAP[@]}"; do
+        if [[ -z "${DEF_MAP[$NUM]}" ]]; then
+            EXTRA=true
+            EXTRA_LIST+=("$NUM:${USER_MAP[$NUM]}")
+        fi
+    done
+fi
+
+########################################
+# CONFIG STATUS (FINAL CLEAN VERSION)
+########################################
+
+echo "Config Status:"
+
+# Ordering
+if [[ "$OUT_OF_ORDER" == false ]]; then
+    echo "  Permissions are in order"
+else
+    echo "  ERROR - Permissions are out of order"
+fi
+
+# Comparison
+if [[ "$SKIP_COMPARE" == true ]]; then
+    echo "  WARNING - Group '$GROUP' not defined in default_perms.m (comparison skipped)"
+elif ! $MISSING && ! $EXTRA && ! $MISMATCH; then
+    echo "  Permissions match default_perms.m file"
+else
+    echo "  ERROR - Permissions DO NOT match default_perms.m file"
+fi
+
+echo
+
+########################################
+# ORDER DETAILS
+########################################
 
 if [[ "$OUT_OF_ORDER" == true ]]; then
     echo "Out of order entries detected:"
@@ -221,8 +267,11 @@ if [[ "$OUT_OF_ORDER" == true ]]; then
     echo
 fi
 
-# Missing perms
-if $MISSING; then
+########################################
+# DIFFERENCE REPORTING
+########################################
+
+if [[ "$SKIP_COMPARE" == false && $MISSING == true ]]; then
     echo "User is missing:"
     for entry in "${MISSING_LIST[@]}"; do
         format_output "${entry%%:*}" "${entry##*:}"
@@ -230,8 +279,7 @@ if $MISSING; then
     echo
 fi
 
-# Extra perms
-if $EXTRA; then
+if [[ "$SKIP_COMPARE" == false && $EXTRA == true ]]; then
     echo "User should not have:"
     for entry in "${EXTRA_LIST[@]}"; do
         format_output "${entry%%:*}" "${entry##*:}"
@@ -239,8 +287,7 @@ if $EXTRA; then
     echo
 fi
 
-# Mismatched Read/Write
-if $MISMATCH; then
+if [[ "$SKIP_COMPARE" == false && $MISMATCH == true ]]; then
     echo "User should have Read/Write correction for:"
     for entry in "${MISMATCH_LIST[@]}"; do
         format_output "${entry%%:*}" "${entry##*:}"
@@ -248,13 +295,14 @@ if $MISMATCH; then
     echo
 fi
 
-# --- Current Permissions Report ---
+########################################
+# CURRENT PERMISSIONS
+########################################
+
 echo "Permissions Granted:"
 printf "%-12s %-30s %-10s\n" "Appli Num" "Application" "Permissions"
 printf "%-12s %-30s %-10s\n" "-----------" "------------------------------" "-----------"
 
 for p in $PERMS; do
-    NUM="${p%%:*}"
-    PERM_MODE="${p##*:}"
-    format_output "$NUM" "$PERM_MODE"
+    format_output "${p%%:*}" "${p##*:}"
 done
